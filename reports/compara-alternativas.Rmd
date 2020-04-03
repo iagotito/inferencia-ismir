@@ -19,6 +19,7 @@ knitr::opts_chunk$set(tidy = FALSE,
 
 ```
 
+
 ```{r read}
 dados = read_csv(here::here("data/satisfacoes.csv"), 
                  col_types = "cdcc") 
@@ -26,6 +27,13 @@ dados = read_csv(here::here("data/satisfacoes.csv"),
 glimpse(dados)
 ```
 
+baseline - sem mecanismos de administração?
+combined - com mais de um mecanismo?
+like/deslike
+up/down
+skip
+
+## Código do professor:
 
 ```{r}
 comparacao1 = dados %>% 
@@ -44,6 +52,14 @@ theta <- function(d, i) {
 theta(comparacao1, i = 1:NROW(comparacao1))
 ```
 
+
+#### Análise:
+Comparação da preferência dos usuários em uma JukeBox sem modelo de gerência de músicas e uma com o modelo de Likes/Dislikes. O resultado de 1.5, por ser positivo, indica que a média de satisfação por usar o modelo de like/dislike é maior do que a média por não usar nenhum modelo, mostrando assim, uma preferência por Jukeboxes com modelo de gerência por like/dislike a uma sem modelo algum. Um resultado negativo indicaria o contrário.
+
+
+#### Minhas observações:
+O nome da função não parece ter sido bem escolhido, visto que ela não calula uma medida para uma única variável, e sim, compara duas variáveis. Eu preferiria separar em outras funções (uma para calcular o theta de alguma coisa e outra para comparar duas variáveis, usando incluse, a que qualcula o theta) para manter o código mais encapsulado.
+
 ```{r}
 ci1 = boot(data = comparacao1,
            statistic = theta,
@@ -54,4 +70,120 @@ ci1 = boot(data = comparacao1,
 
 ci1
 ```
+
+Podemos afirmar, com 95% de confiança, que a média das comparações entre Baseline e Likes/Dislikes está entre 1.16 e 1.86. Dessa forma, temos 95% de confiança de que os usuários preferem o sistema de gerenciamento das músicas por like e dislike do que nenhum sistema de gerenciamento.
+
+
+## Meu código
+Visto que a atividade pede para analisar qual **o melhor** mecanismo, eu já posso descartar o baseline, já que ele é pior do que o like/dislike. Dessa forma, eu só preciso comparar o melhor até então com o próximo até analisar todos os mecanismos.
+Porém isso parece demorado e pouco eficiente.
+Ao invés disso, eu posso calcular a média de todas as métricas e ver qual tem o intervalo com maiores valores.
+Mas aí como o bootstrap só me dá o intervalo de uma coisa por vez, serão 5 bootstraps diferentes?
+Deve ter uma forma mais fácil **(?)**, mas é essa que eu sei por hora. Pelo menos eu pratico...
+
+```{r}
+theta_baseline <- function(d, i) {
+    d %>%
+        filter(scenario == "baseline") %>% 
+        slice(i) %>% 
+        summarise(media = mean(satisfaction)) %>% 
+        pull(media)
+}
+```
+E agora é basicamente Ctrl+C, Ctrl+V (e por isso eu acho que deve ter uma maneira melhor de fazer isso).
+
+```{r}
+theta_combined <- function(d, i) {
+    d %>%
+        filter(scenario == "combined") %>% 
+        slice(i) %>% 
+        summarise(media = mean(satisfaction)) %>% 
+        pull(media)
+}
+
+theta_likedislike <- function(d, i) {
+    d %>%
+        filter(scenario == "like/dislike") %>% 
+        slice(i) %>% 
+        summarise(media = mean(satisfaction)) %>% 
+        pull(media)
+}
+
+theta_updown <- function(d, i) {
+    d %>%
+        filter(scenario == "up/downvoting") %>% 
+        slice(i) %>% 
+        summarise(media = mean(satisfaction)) %>% 
+        pull(media)
+}
+
+theta_skip <- function(d, i) {
+    d %>%
+        filter(scenario == "skip") %>% 
+        slice(i) %>% 
+        summarise(media = mean(satisfaction)) %>% 
+        pull(media)
+}
+```
+
+E agora vamos calcular os ic's:
+
+```{r}
+ic_baseline = dados %>% 
+    boot(statistic = theta_baseline,
+         R = 4000) %>% 
+    tidy(conf.level = .95,
+         conf.method = "bca",
+         conf.int = TRUE) %>% 
+        mutate(scenario = "baseline")
+
+ic_combined = dados %>% 
+    boot(statistic = theta_combined,
+         R = 4000) %>% 
+    tidy(conf.level = .95,
+         conf.method = "bca",
+         conf.int = TRUE) %>% 
+        mutate(scenario = "combined")
+
+ic_likedislike = dados %>% 
+    boot(statistic = theta_likedislike,
+         R = 4000) %>% 
+    tidy(conf.level = .95,
+         conf.method = "bca",
+         conf.int = TRUE) %>% 
+        mutate(scenario = "like/dislike")
+
+ic_updown = dados %>% 
+    boot(statistic = theta_updown,
+         R = 4000) %>% 
+    tidy(conf.level = .95,
+         conf.method = "bca",
+         conf.int = TRUE) %>% 
+        mutate(scenario = "up/downvoting")
+
+ic_skip = dados %>% 
+    boot(statistic = theta_skip,
+         R = 4000) %>% 
+    tidy(conf.level = .95,
+         conf.method = "bca",
+         conf.int = TRUE) %>% 
+        mutate(scenario = "skip")
+
+rbind(ic_baseline, ic_combined, ic_likedislike, ic_updown, ic_skip)
+```
+
+Aqui no olhômetro eu diria que:
+Up/Down voting é a melhor maneira de gerenciamento (maior conf.low e maior conf.high)
+Combined em segundo (segundos maiores conf.low e conf.high)
+Like/Dislike em terceiro
+Skip em quarto
+Baseline em último
+
+Dessa forma, podemos dizer com 95% de confiança que os valores de satisfação para o mecanismo de up/down são os maiores na população, e se encontram entre 4.22 e 4.60.
+
+#### Obs.:
+No artigo e na aula eu vi um gráfico com essas variáveis, mostrando o intervalo delas, mas eu não sei como fazê-lo
+
+
+
 
